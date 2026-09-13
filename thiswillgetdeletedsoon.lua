@@ -1,25 +1,54 @@
 --[[
-    Surreal Hub v1.2
+    Surreal Hub v1.3
     Total Roblox Drama — Camp
     Interface: Luna (Patched — Full Click Inputs)
     Merged: Sus R6 + Fly V3 + Flinger
 ]]
 
 --==================================================
--- LOAD PATCHED LUNA
+-- LUNA LOADER — infinitescripts-cloud only
 --==================================================
-local Luna
-local ok, result = pcall(function()
-    return loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs_full_click.lua",
-        true
-    ))()
-end)
+local LUNA_SOURCES = {
+    -- exact original
+    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs_full_click.lua",
+    -- branch may have been renamed to main
+    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/main/LunaUI_inputs_full_click.lua",
+    -- file may have been renamed
+    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs.lua",
+    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/main/LunaUI_inputs.lua",
+    -- fallback in root
+    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/Luna.lua",
+    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/main/Luna.lua",
+}
 
-if ok and result then
-    Luna = result
-else
-    return warn("[Surreal Hub] Failed to load Luna Interface Suite: " .. tostring(result))
+local Luna
+local lastErr = "no sources tried"
+
+for _, url in ipairs(LUNA_SOURCES) do
+    local ok, result = pcall(function()
+        local src = game:HttpGet(url, true)
+        if not src or #src < 500 then
+            error("Empty or too-short response (" .. tostring(src and #src or 0) .. " bytes)")
+        end
+        local fn = loadstring(src)
+        if not fn then error("loadstring returned nil") end
+        return fn()
+    end)
+
+    if ok and type(result) == "table" then
+        Luna = result
+        print("[Surreal Hub] Luna loaded from: " .. url)
+        break
+    else
+        lastErr = tostring(result)
+        warn("[Surreal Hub] Luna source failed: " .. url .. " → " .. lastErr)
+    end
+end
+
+if not Luna then
+    warn("[Surreal Hub] All infinitescripts-cloud paths failed. Last error: " .. lastErr)
+    warn("[Surreal Hub] Check that the repo is still public and the file exists.")
+    return
 end
 
 --==================================================
@@ -38,6 +67,27 @@ local LocalPlayer = Players.LocalPlayer
 local Camera      = workspace.CurrentCamera
 local RS          = ReplicatedStorage
 local CONFIG_ROOT = "Surreal Hub"
+
+--==================================================
+-- EXECUTOR FALLBACKS
+--==================================================
+local function ensureFunction(name, fallback)
+    local env = getfenv(0)
+    if type(env[name]) ~= "function" then env[name] = fallback end
+end
+
+ensureFunction("writefile",         function() end)
+ensureFunction("readfile",          function() return "" end)
+ensureFunction("makefolder",        function() end)
+ensureFunction("isfile",            function() return false end)
+ensureFunction("isfolder",          function() return false end)
+ensureFunction("listfiles",         function() return {} end)
+ensureFunction("delfile",           function() end)
+ensureFunction("getcustomasset",    function() return "" end)
+ensureFunction("firetouchinterest", function() end)
+ensureFunction("fireclickdetector", function() end)
+ensureFunction("getconnections",    function() return {} end)
+ensureFunction("request",           http_request or (syn and syn.request) or function() end)
 
 --==================================================
 -- EXECUTOR FALLBACKS
