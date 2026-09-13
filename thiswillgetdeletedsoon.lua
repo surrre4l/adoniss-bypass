@@ -1,5 +1,5 @@
 --[[
-    Surreal Hub v1.0.0
+    Surreal Hub v1.2
     Total Roblox Drama — Camp
     Interface: Luna (Patched — Full Click Inputs)
     Merged: Sus R6 + Fly V3 + Flinger
@@ -11,7 +11,7 @@
 local Luna
 local ok, result = pcall(function()
     return loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/surrre4l/Luna-Interface-Suite/master/luna_source_fixed.lua",
+        "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs_full_click.lua",
         true
     ))()
 end)
