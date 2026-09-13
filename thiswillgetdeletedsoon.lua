@@ -1,5 +1,5 @@
 --[[
-    Surreal Hub v1.2
+    Surreal Hub v1.0.0
     Total Roblox Drama — Camp
     Interface: Luna (Patched — Full Click Inputs)
     Merged: Sus R6 + Fly V3 + Flinger
