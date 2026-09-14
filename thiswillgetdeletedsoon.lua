@@ -1,54 +1,25 @@
 --[[
-    Surreal Hub v1.3
+    Surreal Hub
     Total Roblox Drama — Camp
     Interface: Luna (Patched — Full Click Inputs)
-    Merged: Sus R6 + Fly V3 + Flinger
+    v1.0.0
 ]]
 
 --==================================================
--- LUNA LOADER — infinitescripts-cloud only
+-- LOAD PATCHED LUNA
 --==================================================
-local LUNA_SOURCES = {
-    -- exact original
-    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs_full_click.lua",
-    -- branch may have been renamed to main
-    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/main/LunaUI_inputs_full_click.lua",
-    -- file may have been renamed
-    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs.lua",
-    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/main/LunaUI_inputs.lua",
-    -- fallback in root
-    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/Luna.lua",
-    "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/main/Luna.lua",
-}
-
 local Luna
-local lastErr = "no sources tried"
+local ok, result = pcall(function()
+    return loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/infinitescripts-cloud/Luna-Interface-Suite/master/LunaUI_inputs_full_click.lua",
+        true
+    ))()
+end)
 
-for _, url in ipairs(LUNA_SOURCES) do
-    local ok, result = pcall(function()
-        local src = game:HttpGet(url, true)
-        if not src or #src < 500 then
-            error("Empty or too-short response (" .. tostring(src and #src or 0) .. " bytes)")
-        end
-        local fn = loadstring(src)
-        if not fn then error("loadstring returned nil") end
-        return fn()
-    end)
-
-    if ok and type(result) == "table" then
-        Luna = result
-        print("[Surreal Hub] Luna loaded from: " .. url)
-        break
-    else
-        lastErr = tostring(result)
-        warn("[Surreal Hub] Luna source failed: " .. url .. " → " .. lastErr)
-    end
-end
-
-if not Luna then
-    warn("[Surreal Hub] All infinitescripts-cloud paths failed. Last error: " .. lastErr)
-    warn("[Surreal Hub] Check that the repo is still public and the file exists.")
-    return
+if ok and result then
+    Luna = result
+else
+    return warn("[Surreal Hub] Failed to load Luna Interface Suite: " .. tostring(result))
 end
 
 --==================================================
@@ -90,27 +61,6 @@ ensureFunction("getconnections",    function() return {} end)
 ensureFunction("request",           http_request or (syn and syn.request) or function() end)
 
 --==================================================
--- EXECUTOR FALLBACKS
---==================================================
-local function ensureFunction(name, fallback)
-    local env = getfenv(0)
-    if type(env[name]) ~= "function" then env[name] = fallback end
-end
-
-ensureFunction("writefile",         function() end)
-ensureFunction("readfile",          function() return "" end)
-ensureFunction("makefolder",        function() end)
-ensureFunction("isfile",            function() return false end)
-ensureFunction("isfolder",          function() return false end)
-ensureFunction("listfiles",         function() return {} end)
-ensureFunction("delfile",           function() end)
-ensureFunction("getcustomasset",    function() return "" end)
-ensureFunction("firetouchinterest", function() end)
-ensureFunction("fireclickdetector", function() end)
-ensureFunction("getconnections",    function() return {} end)
-ensureFunction("request",           http_request or (syn and syn.request) or function() end)
-
---==================================================
 -- UTILITIES MODULE
 --==================================================
 local Utilities = {}
@@ -127,8 +77,10 @@ function Utilities.notify(title, content, duration)
     local safeDuration = math.min(duration or MAX_NOTIFY_DURATION, MAX_NOTIFY_DURATION)
     pcall(function()
         Luna:Notification({
-            Title = title, Content = content,
-            Duration = safeDuration, Image = "bell-ring",
+            Title    = title,
+            Content  = content,
+            Duration = safeDuration,
+            Image    = "bell-ring",
         })
     end)
 end
@@ -198,306 +150,6 @@ function Utilities.launchUtility(id)
             return
         end
     end
-end
-
---==================================================
--- FOLLOW CONTROLLER (Sus R6 Target Follower)
---==================================================
-local FollowController = {}
-FollowController.__index = FollowController
-
-local ANIMATION_ID    = "189854234"
-local STEP_TIME       = 0.15
-local FORWARD_OFFSET  = CFrame.new(0, 0, -2.5)
-local BACKWARD_OFFSET = CFrame.new(0, 0, -1.3)
-local TWEEN_INFO      = TweenInfo.new(STEP_TIME, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-
-function FollowController.new()
-    local self = setmetatable({}, FollowController)
-    self._following, self._target, self._anim, self._tween, self._thread = false, nil, nil, nil, nil
-    self.Changed = nil
-    return self
-end
-
-function FollowController:IsFollowing() return self._following end
-function FollowController:GetTarget()   return self._target end
-
-function FollowController:SetTarget(player)
-    if player == LocalPlayer then return false, "Cannot target yourself" end
-    self._target = player
-    if self._following then
-        self:Stop()
-        if player then return self:Start() end
-    end
-    return true
-end
-
-function FollowController:Start()
-    if self._following then return true end
-    if not self._target or not self._target.Character then return false, "Target not available" end
-    self._following = true
-    self:_playAnim()
-    self:_notify()
-    self._thread = task.spawn(function() self:_loop() end)
-    return true
-end
-
-function FollowController:Stop()
-    if not self._following then return end
-    self._following = false
-    if self._tween then self._tween:Cancel(); self._tween = nil end
-    self:_stopAnim()
-    self:_notify()
-end
-
-function FollowController:_notify() if self.Changed then self.Changed(self._following) end end
-
-function FollowController:_loop()
-    while self._following do
-        local tc   = self._target and self._target.Character
-        local thrp = tc and tc:FindFirstChild("HumanoidRootPart")
-        local myc  = LocalPlayer.Character
-        local myhrp = myc and myc:FindFirstChild("HumanoidRootPart")
-        if not thrp or not myhrp then self:Stop() return end
-        self:_tween(myhrp, thrp.CFrame * FORWARD_OFFSET)
-        if not self._following then return end
-        self:_tween(myhrp, thrp.CFrame * BACKWARD_OFFSET)
-    end
-end
-
-function FollowController:_tween(inst, goal)
-    local t = TweenService:Create(inst, TWEEN_INFO, { CFrame = goal })
-    self._tween = t
-    t:Play()
-    t.Completed:Wait()
-    if self._tween == t then self._tween = nil end
-end
-
-function FollowController:_playAnim()
-    local char = LocalPlayer.Character
-    local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator")
-    if not animator.Parent then animator.Parent = hum end
-    local a = Instance.new("Animation")
-    a.AnimationId = "rbxassetid://" .. ANIMATION_ID
-    local track = animator:LoadAnimation(a)
-    track:Play()
-    self._anim = track
-end
-
-function FollowController:_stopAnim()
-    if self._anim then self._anim:Stop(); self._anim = nil end
-end
-
-local followController = FollowController.new()
-
---==================================================
--- FLY CONTROLLER V3
---==================================================
-local FlyController = {}
-FlyController.__index = FlyController
-
-local FLY_SPEED_SLOW = 50
-local FLY_SPEED_FAST = 150
-
-function FlyController.new()
-    local self = setmetatable({}, FlyController)
-    self._enabled = false
-    self._bv, self._bg = nil, nil
-    self._conns = {}
-    self._renderConn = nil
-    self._speed = FLY_SPEED_SLOW
-    self._keys = { W = false, A = false, S = false, D = false, Space = false, Ctrl = false }
-    self.Changed = nil
-    return self
-end
-
-function FlyController:IsEnabled() return self._enabled end
-function FlyController:SetSpeed(v) self._speed = v end
-
-function FlyController:Start()
-    if self._enabled then return true end
-    local root = Utilities.rootPart()
-    if not root then return false, "No character" end
-
-    self._enabled = true
-    root.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01, 0, 0)
-
-    local bv = Instance.new("BodyVelocity")
-    bv.Name = "SurrealFlyBV"
-    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.zero
-    bv.Parent = root
-    self._bv = bv
-
-    local bg = Instance.new("BodyGyro")
-    bg.Name = "SurrealFlyBG"
-    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bg.P = 9e4
-    bg.D = 100
-    bg.Parent = root
-    self._bg = bg
-
-    local hum = Utilities.humanoid()
-    if hum then hum.PlatformStand = true end
-
-    local function bindKey(input, key, state)
-        table.insert(self._conns, input.InputBegan:Connect(function(i)
-            if i.KeyCode == key then self._keys[state] = true end
-        end))
-        table.insert(self._conns, input.InputEnded:Connect(function(i)
-            if i.KeyCode == key then self._keys[state] = false end
-        end))
-    end
-    bindKey(UserInputService, Enum.KeyCode.W, "W")
-    bindKey(UserInputService, Enum.KeyCode.A, "A")
-    bindKey(UserInputService, Enum.KeyCode.S, "S")
-    bindKey(UserInputService, Enum.KeyCode.D, "D")
-    bindKey(UserInputService, Enum.KeyCode.Space, "Space")
-    bindKey(UserInputService, Enum.KeyCode.LeftControl, "Ctrl")
-
-    self._renderConn = RunService.RenderStepped:Connect(function()
-        if not self._enabled then return end
-        local r = Utilities.rootPart()
-        if not r or not self._bv or not self._bg then return end
-
-        local cam = workspace.CurrentCamera
-        local move = Vector3.zero
-        if self._keys.W then move += cam.CFrame.LookVector end
-        if self._keys.S then move -= cam.CFrame.LookVector end
-        if self._keys.A then move -= cam.CFrame.RightVector end
-        if self._keys.D then move += cam.CFrame.RightVector end
-        if self._keys.Space then move += Vector3.new(0, 1, 0) end
-        if self._keys.Ctrl then move -= Vector3.new(0, 1, 0) end
-
-        if move.Magnitude > 0 then
-            self._bv.Velocity = move.Unit * self._speed
-        else
-            self._bv.Velocity = Vector3.zero
-        end
-        self._bg.CFrame = cam.CFrame
-    end)
-
-    if self.Changed then self.Changed(true) end
-    return true
-end
-
-function FlyController:Stop()
-    if not self._enabled then return end
-    self._enabled = false
-    if self._bv then self._bv:Destroy(); self._bv = nil end
-    if self._bg then self._bg:Destroy(); self._bg = nil end
-    if self._renderConn then self._renderConn:Disconnect(); self._renderConn = nil end
-    for _, c in ipairs(self._conns) do c:Disconnect() end
-    self._conns = {}
-    local hum = Utilities.humanoid()
-    if hum then hum.PlatformStand = false end
-    if self.Changed then self.Changed(false) end
-end
-
-local flyController = FlyController.new()
-
---==================================================
--- TROLL MODULE (Sus R6 + Flinger)
---==================================================
-local Troll = {}
-
-function Troll.Fling()
-    task.spawn(function()
-        pcall(function()
-            loadstring(game:HttpGet("https://files.catbox.moe/ycupbi.txt"))()
-        end)
-    end)
-end
-
-function Troll.Bang()
-    task.spawn(function()
-        pcall(function()
-            loadstring(game:HttpGet(
-                "https://rawscripts.net/raw/Universal-Script-New-Bang-script-made-by-me-OFC-75582"
-            ))()
-        end)
-    end)
-end
-
-function Troll.Freaky()
-    task.spawn(function()
-        pcall(function()
-            loadstring(game:HttpGet(
-                "https://rawscripts.net/raw/Universal-Script-Freaky-gui-supported-r6-r15-29701"
-            ))()
-        end)
-    end)
-end
-
--- ⭐ Flinger (MoonVeil-obfuscated, loaded from GitHub raw)
-function Troll.Flinger()
-    task.spawn(function()
-        local url = "https://raw.githubusercontent.com/surrre4l/bruh/main/exe.lua.txt"
-        local ok, err = pcall(function()
-            local src = game:HttpGet(url, true)
-            if not src or #src < 50 then
-                error("Empty or invalid response from Flinger source")
-            end
-            local fn = loadstring(src)
-            if not fn then
-                error("loadstring failed — executor may not support this obfuscation")
-            end
-            fn()
-        end)
-        if not ok then
-            Utilities.notify("Flinger Error", tostring(err), 4)
-            warn("[Surreal Hub][Flinger] " .. tostring(err))
-        else
-            Utilities.notify("Flinger Loaded", "Flinger is now active.", 4)
-        end
-    end)
-end
-
-function Troll.GiveJerkTool()
-    local plr  = LocalPlayer
-    local char = plr.Character or plr.CharacterAdded:Wait()
-    local hum  = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid")
-    local pack = plr:FindFirstChildOfClass("Backpack") or plr:WaitForChild("Backpack")
-
-    if workspace:FindFirstChild("aaa") then workspace:FindFirstChild("aaa"):Destroy() end
-
-    local isR15 = hum.RigType == Enum.HumanoidRigType.R15
-    local animation = Instance.new("Animation")
-    animation.Name = "aaa"
-    animation.Parent = workspace
-    animation.AnimationId = isR15 and "rbxassetid://698251653" or "rbxassetid://72042024"
-
-    local tool = Instance.new("Tool")
-    tool.Name = "Jerk"
-    tool.RequiresHandle = false
-    tool.Parent = pack
-
-    local doing, animtrack = false, nil
-    tool.Equipped:Connect(function()
-        doing = true
-        while doing do
-            if not animtrack then
-                animtrack = hum:FindFirstChildOfClass("Animator")
-                animtrack = animtrack and animtrack:LoadAnimation(animation)
-            end
-            if animtrack then
-                animtrack:Play()
-                animtrack:AdjustSpeed(0.7)
-                animtrack.TimePosition = 0.6
-                task.wait(0.1)
-                while doing and animtrack and animtrack.TimePosition < 0.7 do task.wait(0.05) end
-                animtrack:Stop()
-                animtrack:Destroy()
-                animtrack = nil
-            end
-        end
-    end)
-    tool.Unequipped:Connect(function()
-        doing = false
-        if animtrack then animtrack:Stop(); animtrack:Destroy(); animtrack = nil end
-    end)
 end
 
 --==================================================
@@ -571,6 +223,8 @@ local State = {
     nameplateCharConns  = {},
 
     waterWalkEnabled = false,
+    flyEnabled = false,
+    followEnabled = false,
 }
 
 --==================================================
@@ -608,7 +262,7 @@ local Main         = Window:CreateTab({ Name = "Main",       Icon = "view_in_ar"
 local Challenges   = Window:CreateTab({ Name = "Challenges", Icon = "emoji_events",      ImageSource = "Material", ShowTitle = true })
 local Morphs       = Window:CreateTab({ Name = "Morphs",     Icon = "accessibility_new", ImageSource = "Material", ShowTitle = true })
 local Visuals      = Window:CreateTab({ Name = "Visuals",    Icon = "visibility",        ImageSource = "Material", ShowTitle = true })
-local TrollTab     = Window:CreateTab({ Name = "Troll",      Icon = "sports_martial_arts", ImageSource = "Material", ShowTitle = true })
+local TrollTab     = Window:CreateTab({ Name = "Troll",      Icon = "bolt",              ImageSource = "Material", ShowTitle = true })
 local UtilitiesTab = Window:CreateTab({ Name = "Utilities",  Icon = "build",             ImageSource = "Material", ShowTitle = true })
 
 --==================================================
@@ -868,6 +522,128 @@ Main:CreateButton({
 })
 
 --==================================================
+-- MAIN — COMEBACKS
+--==================================================
+Main:CreateSection("Comebacks")
+
+Main:CreateButton({
+    Name = "Comeback as Male",
+    Description = "rejoin as a blob of male skin",
+    Callback = Utilities.safe(function()
+        local events = RS:FindFirstChild("Events")
+        local buy = events and events:FindFirstChild("Buy")
+        if buy then buy:FireServer("Gender", "Male") end
+    end),
+})
+
+Main:CreateButton({
+    Name = "Comeback as Female",
+    Description = "rejoin as a blob of skin",
+    Callback = Utilities.safe(function()
+        local events = RS:FindFirstChild("Events")
+        local buy = events and events:FindFirstChild("Buy")
+        if buy then buy:FireServer("Gender", "Female") end
+    end),
+})
+
+--==================================================
+-- MAIN — FLY V3
+--==================================================
+Main:CreateSection("Fly")
+
+local flyBV, flyBG, flyRenderConn
+local flyKeys = { W = false, A = false, S = false, D = false, Space = false, Ctrl = false }
+local flySpeed = 50
+local flyConnections = {}
+
+local function stopFly()
+    if flyBV then flyBV:Destroy(); flyBV = nil end
+    if flyBG then flyBG:Destroy(); flyBG = nil end
+    if flyRenderConn then flyRenderConn:Disconnect(); flyRenderConn = nil end
+    for _, c in ipairs(flyConnections) do c:Disconnect() end
+    flyConnections = {}
+    local hum = Utilities.humanoid()
+    if hum then hum.PlatformStand = false end
+    State.flyEnabled = false
+end
+
+local function startFly()
+    local root = Utilities.rootPart()
+    if not root then return false end
+
+    root.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01, 0, 0)
+
+    flyBV = Instance.new("BodyVelocity")
+    flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    flyBV.Velocity = Vector3.zero
+    flyBV.Parent = root
+
+    flyBG = Instance.new("BodyGyro")
+    flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    flyBG.P = 9e4
+    flyBG.D = 100
+    flyBG.Parent = root
+
+    local hum = Utilities.humanoid()
+    if hum then hum.PlatformStand = true end
+
+    local function bind(key, slot)
+        table.insert(flyConnections, UserInputService.InputBegan:Connect(function(i)
+            if i.KeyCode == key then flyKeys[slot] = true end
+        end))
+        table.insert(flyConnections, UserInputService.InputEnded:Connect(function(i)
+            if i.KeyCode == key then flyKeys[slot] = false end
+        end))
+    end
+    bind(Enum.KeyCode.W, "W")
+    bind(Enum.KeyCode.A, "A")
+    bind(Enum.KeyCode.S, "S")
+    bind(Enum.KeyCode.D, "D")
+    bind(Enum.KeyCode.Space, "Space")
+    bind(Enum.KeyCode.LeftControl, "Ctrl")
+
+    flyRenderConn = RunService.RenderStepped:Connect(function()
+        local r = Utilities.rootPart()
+        if not r or not flyBV or not flyBG then return end
+        local cam = workspace.CurrentCamera
+        local move = Vector3.zero
+        if flyKeys.W then move = move + cam.CFrame.LookVector end
+        if flyKeys.S then move = move - cam.CFrame.LookVector end
+        if flyKeys.A then move = move - cam.CFrame.RightVector end
+        if flyKeys.D then move = move + cam.CFrame.RightVector end
+        if flyKeys.Space then move = move + Vector3.new(0, 1, 0) end
+        if flyKeys.Ctrl then move = move - Vector3.new(0, 1, 0) end
+        flyBV.Velocity = (move.Magnitude > 0) and (move.Unit * flySpeed) or Vector3.zero
+        flyBG.CFrame = cam.CFrame
+    end)
+
+    State.flyEnabled = true
+    return true
+end
+
+Main:CreateSlider({
+    Name = "Fly Speed",
+    Description = "how fast you fly",
+    Range = {50, 150},
+    Increment = 5,
+    CurrentValue = 50,
+    Callback = Utilities.safe(function(value) flySpeed = value end),
+}, "FlySpeed")
+
+Main:CreateToggle({
+    Name = "Fly V3",
+    Description = "WASD to move · Space up · Ctrl down",
+    CurrentValue = false,
+    Callback = Utilities.safe(function(enabled)
+        if enabled then
+            if not startFly() then Utilities.notify("Fly V3", "No character", 4) end
+        else
+            stopFly()
+        end
+    end),
+}, "FlyV3")
+
+--==================================================
 -- MAIN — GLOBAL NAMEPLATES
 --==================================================
 local NameplateManager = {}
@@ -955,65 +731,6 @@ Main:CreateToggle({
         if enabled then NameplateManager.enable() else NameplateManager.disable() end
     end),
 }, "GlobalNameplates")
-
---==================================================
--- MAIN — COMEBACKS
---==================================================
-Main:CreateSection("Comebacks")
-
-Main:CreateButton({
-    Name = "Comeback as Male",
-    Description = "rejoin as a blob of male skin",
-    Callback = Utilities.safe(function()
-        local events = RS:FindFirstChild("Events")
-        local buy = events and events:FindFirstChild("Buy")
-        if buy then buy:FireServer("Gender", "Male") end
-    end),
-})
-
-Main:CreateButton({
-    Name = "Comeback as Female",
-    Description = "rejoin as a blob of skin",
-    Callback = Utilities.safe(function()
-        local events = RS:FindFirstChild("Events")
-        local buy = events and events:FindFirstChild("Buy")
-        if buy then buy:FireServer("Gender", "Female") end
-    end),
-})
-
---==================================================
--- MAIN — FLY V3
---==================================================
-Main:CreateSection("Fly")
-
-local flyToggle
-
-Main:CreateSlider({
-    Name = "Fly Speed",
-    Description = "how fast you fly",
-    Range = {FLY_SPEED_SLOW, FLY_SPEED_FAST},
-    Increment = 5,
-    CurrentValue = FLY_SPEED_SLOW,
-    Callback = Utilities.safe(function(value)
-        flyController:SetSpeed(value)
-    end),
-}, "FlySpeed")
-
-flyToggle = Main:CreateToggle({
-    Name = "Fly V3",
-    Description = "WASD to move · Space up · Ctrl down",
-    CurrentValue = false,
-    Callback = Utilities.safe(function(enabled)
-        if enabled then
-            local ok, err = flyController:Start()
-            if not ok and err then
-                Utilities.notify("Fly V3", err, 4)
-            end
-        else
-            flyController:Stop()
-        end
-    end),
-}, "FlyV3")
 
 --==================================================
 -- CHALLENGES
@@ -1612,6 +1329,96 @@ end)
 --==================================================
 TrollTab:CreateSection("Target Follower")
 
+local FollowController = {}
+FollowController.__index = FollowController
+
+local ANIMATION_ID    = "189854234"
+local STEP_TIME       = 0.15
+local FORWARD_OFFSET  = CFrame.new(0, 0, -2.5)
+local BACKWARD_OFFSET = CFrame.new(0, 0, -1.3)
+local TWEEN_INFO      = TweenInfo.new(STEP_TIME, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+
+function FollowController.new()
+    local self = setmetatable({}, FollowController)
+    self._following, self._target, self._anim, self._tween, self._thread = false, nil, nil, nil, nil
+    self.Changed = nil
+    return self
+end
+
+function FollowController:IsFollowing() return self._following end
+function FollowController:GetTarget()   return self._target end
+
+function FollowController:SetTarget(player)
+    if player == LocalPlayer then return false end
+    self._target = player
+    if self._following then
+        self:Stop()
+        if player then return self:Start() end
+    end
+    return true
+end
+
+function FollowController:Start()
+    if self._following then return true end
+    if not self._target or not self._target.Character then return false end
+    self._following = true
+    self:_playAnim()
+    if self.Changed then self.Changed(true) end
+    self._thread = task.spawn(function() self:_loop() end)
+    return true
+end
+
+function FollowController:Stop()
+    if not self._following then return end
+    self._following = false
+    if self._tween then self._tween:Cancel(); self._tween = nil end
+    self:_stopAnim()
+    if self.Changed then self.Changed(false) end
+end
+
+function FollowController:_loop()
+    while self._following do
+        local tc   = self._target and self._target.Character
+        local thrp = tc and tc:FindFirstChild("HumanoidRootPart")
+        local myc  = LocalPlayer.Character
+        local myhrp = myc and myc:FindFirstChild("HumanoidRootPart")
+        if not thrp or not myhrp then self:Stop() return end
+        self:_tween(myhrp, thrp.CFrame * FORWARD_OFFSET)
+        if not self._following then return end
+        self:_tween(myhrp, thrp.CFrame * BACKWARD_OFFSET)
+    end
+end
+
+function FollowController:_tween(inst, goal)
+    local t = TweenService:Create(inst, TWEEN_INFO, { CFrame = goal })
+    self._tween = t
+    t:Play()
+    t.Completed:Wait()
+    if self._tween == t then self._tween = nil end
+end
+
+function FollowController:_playAnim()
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = hum
+    end
+    local a = Instance.new("Animation")
+    a.AnimationId = "rbxassetid://" .. ANIMATION_ID
+    local track = animator:LoadAnimation(a)
+    track:Play()
+    self._anim = track
+end
+
+function FollowController:_stopAnim()
+    if self._anim then self._anim:Stop(); self._anim = nil end
+end
+
+local followController = FollowController.new()
+
 local playerMap = {}
 local suppress  = false
 
@@ -1636,7 +1443,6 @@ targetDropdown = TrollTab:CreateDropdown({
     Options = buildOptions(),
     CurrentOption = {},
     MultipleOptions = false,
-    Flag = "SusR6_Target",
     Callback = function(option)
         if suppress then return end
         local player
@@ -1667,16 +1473,14 @@ local followToggle
 followToggle = TrollTab:CreateToggle({
     Name = "Follow Target",
     CurrentValue = false,
-    Flag = "SusR6_Follow",
     Callback = function(value)
         if suppress then return end
         if value then
-            local ok, err = followController:Start()
+            local ok = followController:Start()
             if not ok then
                 suppress = true
                 pcall(function() followToggle:Set(false) end)
                 suppress = false
-                if err then warn("[Surreal Hub] " .. err) end
             end
         else
             followController:Stop()
@@ -1716,14 +1520,114 @@ end)
 --==================================================
 TrollTab:CreateSection("Scripts")
 
-TrollTab:CreateButton({ Name = "Fling", Callback = Troll.Fling })
-TrollTab:CreateButton({ Name = "Bang [NEW]", Callback = Troll.Bang })
-TrollTab:CreateButton({ Name = "Jerk Off (gives tool)", Callback = Troll.GiveJerkTool })
-TrollTab:CreateButton({ Name = "Freaky", Callback = Troll.Freaky })
-TrollTab:CreateButton({ Name = "Flinger", Description = "loads the Flinger script from GitHub", Callback = Troll.Flinger })
+TrollTab:CreateButton({
+    Name = "Fling",
+    Callback = function()
+        task.spawn(function()
+            pcall(function() "))() end)
+        end)
+    end,
+})
+
+TrollTab:CreateButton({
+    Name = "Bang [NEW]",
+    Callback = function()
+        task.spawn(function()
+            pcall(function()
+                loadstring(game:HttpGet(
+                    "https://rawscripts.net/raw/Universal-Script-New-Bang-script-made-by-me-OFC-75582"
+                ))()
+            end)
+        end)
+    end,
+})
+
+TrollTab:CreateButton({
+    Name = "Jerk Off (gives tool)",
+    Callback = function()
+        local plr  = LocalPlayer
+        local char = plr.Character or plr.CharacterAdded:Wait()
+        local hum  = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid")
+        local pack = plr:FindFirstChildOfClass("Backpack") or plr:WaitForChild("Backpack")
+
+        if workspace:FindFirstChild("aaa") then workspace:FindFirstChild("aaa"):Destroy() end
+
+        local isR15 = hum.RigType == Enum.HumanoidRigType.R15
+        local animation = Instance.new("Animation")
+        animation.Name = "aaa"
+        animation.Parent = workspace
+        animation.AnimationId = isR15 and "rbxassetid://698251653" or "rbxassetid://72042024"
+
+        local tool = Instance.new("Tool")
+        tool.Name = "Jerk"
+        tool.RequiresHandle = false
+        tool.Parent = pack
+
+        local doing, animtrack = false, nil
+        tool.Equipped:Connect(function()
+            doing = true
+            while doing do
+                if not animtrack then
+                    animtrack = hum:FindFirstChildOfClass("Animator")
+                    animtrack = animtrack and animtrack:LoadAnimation(animation)
+                end
+                if animtrack then
+                    animtrack:Play()
+                    animtrack:AdjustSpeed(0.7)
+                    animtrack.TimePosition = 0.6
+                    task.wait(0.1)
+                    while doing and animtrack and animtrack.TimePosition < 0.7 do task.wait(0.05) end
+                    animtrack:Stop()
+                    animtrack:Destroy()
+                    animtrack = nil
+                end
+            end
+        end)
+        tool.Unequipped:Connect(function()
+            doing = false
+            if animtrack then animtrack:Stop(); animtrack:Destroy(); animtrack = nil end
+        end)
+    end,
+})
+
+TrollTab:CreateButton({
+    Name = "Freaky",
+    Callback = function()
+        task.spawn(function()
+            pcall(function()
+                loadstring(game:HttpGet(
+                    "https://rawscripts.net/raw/Universal-Script-Freaky-gui-supported-r6-r15-29701"
+                ))()
+            end)
+        end)
+    end,
+})
+
+TrollTab:CreateButton({
+    Name = "Flinger",
+    Description = "loads the Flinger script from GitHub",
+    Callback = function()
+        task.spawn(function()
+            local url = "https://raw.githubusercontent.com/surrre4l/bruh/main/exe.lua.txt"
+            local ok, err = pcall(function()
+                local src = game:HttpGet(url, true)
+                if not src or #src < 50 then error("Empty or invalid response") end
+                local fn = loadstring(src)
+                if not fn then error("loadstring returned nil") end
+                fn()
+            end)
+            if ok then
+                Utilities.notify("Flinger Loaded", "Flinger is now active.", 4)
+            else
+                Utilities.notify("Flinger Error", tostring(err), 4)
+                warn("[Surreal Hub][Flinger] " .. tostring(err))
+            end
+        end)
+    end,
+})
 
 --==================================================
--- HELPER MODULES
+-- UTILITIES — HELPERS
 --==================================================
 local WaterManager = {}
 
@@ -1830,4 +1734,18 @@ task.spawn(function()
     pcall(function()
         Luna:LoadAutoloadConfig()
     end)
+
+    -- Give the UI a moment to render before notifying
+    task.wait(1.5)
+
+    pcall(function()
+        Luna:Notification({
+            Title    = "Surreal Hub Loaded",
+            Content  = "inputs may not work, tested and I can't click it so. Try if u can!",
+            Duration = 6,
+            Image    = "triangle-alert",
+        })
+    end)
+
+    warn("[Surreal Hub] inputs may not work, tested and I can't click it so. Try if u can!")
 end)
