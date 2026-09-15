@@ -1650,7 +1650,7 @@ UtilitiesTab:CreateSection("Interface")
 
 UtilitiesTab:CreateButton({
     Name = "Execute Rayfield Version",
-    Description = "kills Luna UI and loads the Rayfield build",
+    Description = "recommend,inputs are hell not working here (for mobile)",
     Callback = Utilities.safe(function()
         -- 1. Confirm with the user (if Luna's Dialog API exists)
         local confirmed = false
