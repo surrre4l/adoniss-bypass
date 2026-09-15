@@ -1678,38 +1678,63 @@ UtilitiesTab:CreateButton({
         end
         if not confirmed then return end
 
-        -- 2. Destroy Luna's UI
-        pcall(function()
-            local names = {
-                "LunaUI", "Luna", "LunaInterface",
-                "SurrealHub", "Surreal Hub"
-            }
-            local parents = {
-                game:GetService("CoreGui"),
-                LocalPlayer:FindFirstChild("PlayerGui"),
-            }
+        -- 2. Destroy Luna's UI (aggressive)
+pcall(function()
+    local WIN_NAME = "Surreal Hub (Camp)" -- must match your CreateWindow Name
+    local names = {
+        WIN_NAME,
+        "LunaUI", "Luna", "LunaInterface",
+        "SurrealHub", "Surreal Hub"
+    }
 
-            for _, parent in ipairs(parents) do
-                if parent then
-                    -- By name
-                    for _, name in ipairs(names) do
-                        local gui = parent:FindFirstChild(name)
-                        if gui and gui:IsA("ScreenGui") then
-                            gui:Destroy()
-                        end
-                    end
-                    -- By pattern (luna / surreal)
-                    for _, child in ipairs(parent:GetChildren()) do
-                        if child:IsA("ScreenGui") then
-                            local n = child.Name:lower()
-                            if n:find("luna") or n:find("surreal") then
-                                child:Destroy()
-                            end
-                        end
-                    end
+    -- Collect every plausible parent
+    local parents = {}
+    local function add(p) if p then table.insert(parents, p) end end
+
+    add(game:GetService("CoreGui"))
+    add(LocalPlayer:FindFirstChild("PlayerGui"))
+
+    -- Executor hidden UI (syn/hyperion/etc.)
+    pcall(function() add(gethui and gethui()) end)
+
+    -- Some forks parent to workspace or Chat
+    add(workspace)
+    add(game:GetService("Chat"))
+
+    -- Walk every ScreenGui / GuiObject in each parent
+    for _, parent in ipairs(parents) do
+        for _, child in ipairs(parent:GetChildren()) do
+            if child:IsA("ScreenGui") or child:IsA("Folder") then
+                local n = child.Name:lower()
+                local match =
+                    child.Name == WIN_NAME or
+                    n:find("luna", 1, true) or
+                    n:find("surreal", 1, true)
+
+                if match then
+                    child:Destroy()
                 end
             end
+        end
+    end
+
+    -- Named lookup as final fallback
+    for _, parent in ipairs(parents) do
+        for _, name in ipairs(names) do
+            local gui = parent:FindFirstChild(name)
+            if gui then gui:Destroy() end
+        end
+    end
+
+    -- Nuke Luna's internal flag table so it can't re-show itself
+    if getgenv then
+        pcall(function()
+            local env = getgenv()
+            env.Luna = nil
+            env.LunaUI = nil
         end)
+    end
+end)
 
         -- 3. Disable Luna autoload so it doesn't fight Rayfield
         pcall(function()
