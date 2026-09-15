@@ -1646,6 +1646,106 @@ UtilitiesTab:CreateButton({
     Callback = Utilities.safe(function() Utilities.launchUtility("energize") end),
 })
 
+UtilitiesTab:CreateSection("Interface")
+
+UtilitiesTab:CreateButton({
+    Name = "Execute Rayfield Version",
+    Description = "kills Luna UI and loads the Rayfield build",
+    Callback = Utilities.safe(function()
+        -- 1. Confirm with the user (if Luna's Dialog API exists)
+        local confirmed = false
+        local dialogWorked = pcall(function()
+            Luna:Dialog({
+                Title   = "Switch to Rayfield?",
+                Content = "Luna UI will be destroyed. The Rayfield version will load instead.",
+                Buttons = {
+                    { Title = "Cancel",   Callback = function() end },
+                    { Title = "Continue", Callback = function() confirmed = true end },
+                },
+            })
+        end)
+
+        -- If no dialog API, auto-confirm after a brief pause
+        if not dialogWorked then
+            confirmed = true
+        end
+
+        -- Wait for user confirmation (or fallback delay)
+        local waited = 0
+        while not confirmed and waited < 10 do
+            task.wait(0.1)
+            waited = waited + 0.1
+        end
+        if not confirmed then return end
+
+        -- 2. Destroy Luna's UI
+        pcall(function()
+            local names = {
+                "LunaUI", "Luna", "LunaInterface",
+                "SurrealHub", "Surreal Hub"
+            }
+            local parents = {
+                game:GetService("CoreGui"),
+                LocalPlayer:FindFirstChild("PlayerGui"),
+            }
+
+            for _, parent in ipairs(parents) do
+                if parent then
+                    -- By name
+                    for _, name in ipairs(names) do
+                        local gui = parent:FindFirstChild(name)
+                        if gui and gui:IsA("ScreenGui") then
+                            gui:Destroy()
+                        end
+                    end
+                    -- By pattern (luna / surreal)
+                    for _, child in ipairs(parent:GetChildren()) do
+                        if child:IsA("ScreenGui") then
+                            local n = child.Name:lower()
+                            if n:find("luna") or n:find("surreal") then
+                                child:Destroy()
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
+        -- 3. Disable Luna autoload so it doesn't fight Rayfield
+        pcall(function()
+            Luna:SetAutoloadConfigEnabled(false)
+        end)
+
+        -- 4. Small delay before loading Rayfield
+        task.wait(0.5)
+
+        -- 5. Load the Rayfield version
+        local RAYFIELD_URL = "https://raw.githubusercontent.com/surrre4l/surrealhub/main/rayfieldver.lua"
+
+        task.spawn(function()
+            local ok, err = pcall(function()
+                local src = game:HttpGet(RAYFIELD_URL, true)
+                if not src or #src < 100 then
+                    error("Empty or invalid Rayfield source (" .. tostring(src and #src or 0) .. " bytes)")
+                end
+                local fn = loadstring(src)
+                if not fn then
+                    error("loadstring returned nil")
+                end
+                fn()
+            end)
+
+            if not ok then
+                warn("[Surreal Hub] Failed to load Rayfield version: " .. tostring(err))
+                -- Optional: notify if Luna is still alive
+                pcall(function()
+                    Utilities.notify("Rayfield Failed", tostring(err), 5)
+                end)
+            end
+        end)
+    end),
+})
+
 --==================================================
 -- INITIALIZE
 --==================================================
